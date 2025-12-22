@@ -54,7 +54,8 @@ def load_cfg_from_registry(task_name: str, entry_point_key: str) -> dict | objec
         ValueError: If the entry point key is not available in the gym registry for the task.
     """
     # obtain the configuration entry point
-    cfg_entry_point = gym.spec(task_name.split(":")[-1]).kwargs.get(entry_point_key)
+    spec = gym.spec(task_name.split(":")[-1])
+    cfg_entry_point = spec.kwargs.get(entry_point_key)
     # check if entry point exists
     if cfg_entry_point is None:
         # get existing agents and algorithms
@@ -189,9 +190,16 @@ def get_checkpoint_path(
     # check if runs present in directory
     try:
         # find all runs in the directory that math the regex expression
-        runs = [
-            os.path.join(log_path, run) for run in os.scandir(log_path) if run.is_dir() and re.match(run_dir, run.name)
-        ]
+        # runs = [
+        #     os.path.join(log_path, run) for run in os.scandir(log_path) if run.is_dir() and re.match(run_dir, run.name)
+        # ]
+        runs = []  # 初始化一个空列表
+        print(f"[INFO]: Searching for runs in: '{log_path}' matching regex: '{run_dir}'")
+        for run in os.scandir(log_path):  # 遍历log_path目录下的所有条目
+            if run.is_dir() and re.match(run_dir, run.name):  # 检查是否为目录且名称匹配正则表达式
+                print(f"[INFO]: Found matching run: '{run.name}'")
+                runs.append(os.path.join(log_path, run))  # 如果条件满足，则将完整路径追加到列表中
+
         # sort matched runs by alphabetical order (latest run should be last)
         if sort_alpha:
             runs.sort()
