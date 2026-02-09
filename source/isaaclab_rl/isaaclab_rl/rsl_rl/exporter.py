@@ -123,7 +123,6 @@ class _OnnxPolicyExporter(torch.nn.Module):
         super().__init__()
         self.verbose = verbose
         self.is_recurrent = policy.is_recurrent
-        self.is_cvae = False
         # copy policy parameters
         if hasattr(policy, "actor"):
             self.actor = copy.deepcopy(policy.actor)
@@ -133,15 +132,6 @@ class _OnnxPolicyExporter(torch.nn.Module):
             self.actor = copy.deepcopy(policy.student)
             if self.is_recurrent:
                 self.rnn = copy.deepcopy(policy.memory_s.rnn)
-        elif hasattr(policy, "decoder"):
-            self.decoder = copy.deepcopy(policy.decoder)
-            self.prior_mu = copy.deepcopy(policy.prior_mu)
-            self.prior_logvar = copy.deepcopy(policy.prior_logvar)
-            self.z_scale_factor = policy.z_scale_factor  # 复制缩放因子
-            self.normalize_mu = policy.normalize_mu  # 复制 mu 规范化标志
-            self.mu_normalizer = copy.deepcopy(policy.mu_normalizer)
-            self.is_cvae = True
-            self.forward = self.forward_cvae
         else:
             raise ValueError("Policy does not have an actor/student module.")
         # set up recurrent network
@@ -174,29 +164,7 @@ class _OnnxPolicyExporter(torch.nn.Module):
 
     def forward(self, x):
         return self.actor(self.normalizer(x))
-        
-    def forward_cvae(self, x):
-        """CVAE 前向传播（用于 ONNX 导出，仅使用先验分布）。
-        
-        Args:
-            x: 输入观测（部署观测）。
-        
-        Returns:
-            动作均值。
-        """
-        obs = self.normalizer(x)  # 规范化输入观测
-        # 计算先验参数
-        mu_p = self.prior_mu(obs)
-        logvar_p = self.prior_logvar(obs)
-        # 规范化 mu（如果启用）
-        if self.normalize_mu:
-            mu_p = self.mu_normalizer(mu_p)
-        # 使用均值作为 z（确定性推理，避免随机性）
-        z = mu_p * self.z_scale_factor  # 应用缩放因子
-        # 连接观测和 z 输入解码器
-        decoder_input = torch.cat([obs, z], dim=-1)
-        return self.decoder(decoder_input)  # 输出动作均值
-    
+
     def export(self, path, filename):
         self.to("cpu")
         self.eval()
@@ -232,19 +200,6 @@ class _OnnxPolicyExporter(torch.nn.Module):
                 )
             else:
                 raise NotImplementedError(f"Unsupported RNN type: {self.rnn_type}")
-        elif self.is_cvae:  # 新增：CVAE 导出分支
-            obs = torch.zeros(1, self.prior_mu.in_features)  # dummy 输入（学生观测维度）
-            torch.onnx.export(
-                self,
-                obs,
-                os.path.join(path, filename),
-                export_params=True,
-                opset_version=opset_version,
-                verbose=self.verbose,
-                input_names=["obs"],  # 输入：部署观测
-                output_names=["actions"],  # 输出：动作
-                dynamic_axes={},
-            )
         else:
             obs = torch.zeros(1, self.actor[0].in_features)
             torch.onnx.export(
