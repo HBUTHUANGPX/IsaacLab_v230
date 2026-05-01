@@ -141,7 +141,9 @@ PY
     # clean install torch
     echo "[INFO] Installing torch==${torch_ver} and torchvision==${tv_ver} (cu${cuda_ver}) from ${index}..."
     ${pip_uninstall_command} torch torchvision torchaudio >/dev/null 2>&1 || true
-    ${pip_install_command} -U --index-url "${index}" "torch==${torch_ver}" "torchvision==${tv_ver}"
+    ${pip_install_command} -U --find-links "https://mirrors.aliyun.com/pytorch-wheels/cu128" "torch==${torch_ver}" "torchvision==${tv_ver}"
+    # ${pip_install_command} -U --index-url "${index}" "torch" "torchvision"
+    # ${pip_install_command} -U --index-url "${index}" "torch==${torch_ver}" "torchvision==${tv_ver}"
 }
 
 # extract isaac sim path
